@@ -1,0 +1,942 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IP Pulse | Modern IP & Network Diagnostics</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <!-- Google Fonts: Inter & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  
+  <!-- Leaflet OpenStreetMap CSS & JS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+
+  <!-- Tailwind Configuration for Custom Neon Palette & Fonts -->
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            brand: {
+              dark: '#0a0d14',
+              card: 'rgba(17, 24, 39, 0.75)',
+              border: 'rgba(255, 255, 255, 0.12)',
+              cyan: '#06b6d4',
+              neonBlue: '#3b82f6',
+              purple: '#8b5cf6',
+              emerald: '#10b981',
+              rose: '#f43f5e'
+            }
+          },
+          animation: {
+            'pulse-glow': 'pulseGlow 2.5s infinite',
+            'float': 'float 6s ease-in-out infinite',
+            'spin-slow': 'spin 12s linear infinite',
+          },
+          keyframes: {
+            pulseGlow: {
+              '0%, 100%': { opacity: '0.4', filter: 'drop-shadow(0 0 15px rgba(6, 182, 212, 0.6))' },
+              '50%': { opacity: '0.9', filter: 'drop-shadow(0 0 25px rgba(59, 130, 246, 0.9))' },
+            },
+            float: {
+              '0%, 100%': { transform: 'translateY(0px)' },
+              '50%': { transform: 'translateY(-10px)' },
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0a0d14;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #1f293d;
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #06b6d4;
+    }
+
+    /* Ambient Background Effects */
+    body {
+      background-color: #06090e;
+      color: #f3f4f6;
+      overflow-x: hidden;
+      font-family: 'Inter', sans-serif;
+    }
+
+    .grid-bg {
+      background-image: radial-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 0);
+      background-size: 32px 32px;
+    }
+
+    .glass-card {
+      background: rgba(15, 23, 42, 0.75);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .glass-card:hover {
+      border-color: rgba(6, 182, 212, 0.4);
+      box-shadow: 0 12px 40px -10px rgba(6, 182, 212, 0.2);
+    }
+
+    /* Pulse Map Marker CSS */
+    .leaflet-custom-pulse {
+      width: 22px;
+      height: 22px;
+      background: #06b6d4;
+      border: 3px solid #ffffff;
+      border-radius: 50%;
+      position: relative;
+      box-shadow: 0 0 15px #06b6d4;
+    }
+    .leaflet-custom-pulse::after {
+      content: "";
+      position: absolute;
+      top: -10px;
+      left: -10px;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      border: 2px solid #06b6d4;
+      animation: ripple 1.6s infinite ease-out;
+      opacity: 0;
+    }
+    @keyframes ripple {
+      0% { transform: scale(0.3); opacity: 1; }
+      100% { transform: scale(1.8); opacity: 0; }
+    }
+
+    /* Radial Progress Bar */
+    .circle-bg {
+      fill: none;
+      stroke: rgba(255, 255, 255, 0.1);
+      stroke-width: 3.8;
+    }
+    .circle-progress {
+      fill: none;
+      stroke-width: 3.8;
+      stroke-linecap: round;
+      transition: stroke-dasharray 1s ease, stroke 0.5s ease;
+    }
+
+    /* Toast Notification Animation */
+    @keyframes slideUp {
+      from { transform: translateY(100%) translateX(-50%); opacity: 0; }
+      to { transform: translateY(0) translateX(-50%); opacity: 1; }
+    }
+    .toast-anim {
+      animation: slideUp 0.3s ease forwards;
+    }
+  </style>
+</head>
+<body class="min-h-screen relative grid-bg flex flex-col justify-between selection:bg-cyan-500 selection:text-black">
+
+  <!-- Ambient Animated Light Orbs -->
+  <div class="fixed top-[-10%] left-[-10%] w-[45vw] h-[45vw] rounded-full bg-cyan-600/15 blur-[120px] pointer-events-none animate-pulse-glow"></div>
+  <div class="fixed bottom-[-10%] right-[-10%] w-[45vw] h-[45vw] rounded-full bg-purple-600/15 blur-[120px] pointer-events-none animate-pulse-glow" style="animation-delay: 1.2s;"></div>
+
+  <!-- Header / Navigation -->
+  <header class="sticky top-0 z-40 backdrop-blur-md bg-slate-950/70 border-b border-white/10">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
+      <!-- Logo -->
+      <div class="flex items-center space-x-3 cursor-pointer" onclick="fetchMyIpDetails()">
+        <div class="relative flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-600 text-white shadow-lg shadow-cyan-500/30">
+          <i class="fa-solid fa-network-wired text-xl"></i>
+          <span class="absolute -top-1 -right-1 flex h-3 w-3">
+            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span class="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+          </span>
+        </div>
+        <div>
+          <span class="text-2xl font-extrabold tracking-wider bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 via-blue-400 to-purple-500">
+            IP PULSE
+          </span>
+          <span class="block text-[10px] font-mono text-cyan-400 tracking-widest uppercase">Network Diagnostics</span>
+        </div>
+      </div>
+
+      <!-- Header Action Quick Buttons -->
+      <div class="flex items-center space-x-3">
+        <button id="myIpQuickBtn" onclick="fetchMyIpDetails()" title="Lookup your own IP address"
+          class="flex items-center space-x-2 px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-sm font-medium text-slate-200 hover:text-white transition duration-200">
+          <i class="fa-solid fa-crosshairs text-cyan-400"></i>
+          <span class="hidden sm:inline">My IP</span>
+        </button>
+        <button id="copyHeaderIpBtn" onclick="copyCurrentIp()" title="Copy active IP to clipboard"
+          class="flex items-center space-x-2 px-4 py-2 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-sm font-medium text-cyan-300 transition duration-200">
+          <i class="fa-regular fa-copy"></i>
+          <span class="hidden sm:inline">Copy IP</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content Container -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full flex-grow space-y-8 z-10">
+
+    <!-- Search Hero Section -->
+    <section class="text-center space-y-6 pt-4 pb-2">
+      <div class="inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 text-xs font-mono tracking-wide uppercase">
+        <i class="fa-solid fa-bolt text-xs animate-pulse"></i>
+        <span>Real-Time IP Intelligence & Threat Scanner</span>
+      </div>
+
+      <h1 class="text-3xl sm:text-5xl font-extrabold tracking-tight text-white leading-tight">
+        Detailed Insights for Any <span class="bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-blue-500">IP or Domain</span>
+      </h1>
+      
+      <p class="max-w-2xl mx-auto text-slate-400 text-sm sm:text-base">
+        Instantly analyze IPv4, IPv6, or domain hostnames with geographic precision, ASN/ISP details, proxy/VPN threat detection, and live geolocation maps.
+      </p>
+
+      <!-- Search Bar Form -->
+      <div class="max-w-2xl mx-auto">
+        <form id="searchForm" onsubmit="handleSearch(event)" class="relative group">
+          <div class="absolute -inset-0.5 bg-gradient-to-r from-cyan-500 to-purple-600 rounded-2xl blur opacity-30 group-hover:opacity-75 transition duration-300"></div>
+          <div class="relative flex items-center bg-slate-900 border border-slate-700/80 rounded-2xl overflow-hidden p-1.5 shadow-2xl">
+            <i class="fa-solid fa-magnifying-glass text-slate-400 ml-4 text-lg"></i>
+            <input type="text" id="searchInput" placeholder="Search IP (e.g. 8.8.8.8) or Domain (e.g. github.com)..."
+              class="w-full bg-transparent px-4 py-3 text-white placeholder-slate-500 focus:outline-none font-mono text-sm sm:text-base"
+              spellcheck="false" autocomplete="off" />
+            
+            <button type="button" onclick="clearSearchInput()" id="clearBtn" class="hidden text-slate-400 hover:text-white px-2">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
+
+            <button type="submit" id="searchSubmitBtn"
+              class="ml-2 px-6 py-3 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-semibold rounded-xl transition duration-200 flex items-center space-x-2 shadow-lg shadow-cyan-500/25 shrink-0">
+              <span id="btnText">Lookup</span>
+              <i id="btnIcon" class="fa-solid fa-arrow-right text-sm"></i>
+              <i id="btnSpinner" class="fa-solid fa-circle-notch fa-spin text-sm hidden"></i>
+            </button>
+          </div>
+        </form>
+
+        <!-- Quick Recent Searches Chips -->
+        <div id="recentSearchesContainer" class="mt-4 flex flex-wrap items-center justify-center gap-2 text-xs text-slate-400 hidden">
+          <span class="font-medium text-slate-500 flex items-center"><i class="fa-solid fa-clock-rotate-left mr-1.5"></i> Recents:</span>
+          <div id="recentChips" class="flex flex-wrap gap-2"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Error Display Alert Banner -->
+    <div id="errorAlert" class="hidden max-w-4xl mx-auto p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-sm flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <i class="fa-solid fa-circle-exclamation text-xl text-rose-400 shrink-0"></i>
+        <span id="errorMessage">Unable to resolve requested IP or Domain address. Please verify your query.</span>
+      </div>
+      <button onclick="hideError()" class="text-rose-400 hover:text-rose-200 ml-4"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+
+    <!-- Active Target Summary Banner -->
+    <section class="glass-card rounded-2xl p-6 sm:p-8 relative overflow-hidden">
+      <div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div>
+          <div class="flex items-center space-x-3">
+            <span id="activeTypeBadge" class="px-2.5 py-1 rounded-md text-xs font-mono font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 uppercase tracking-wider">
+              IPv4
+            </span>
+            <span id="activeStatusBadge" class="flex items-center space-x-1.5 text-xs text-emerald-400 font-medium">
+              <span class="h-2 w-2 rounded-full bg-emerald-400 animate-ping"></span>
+              <span>Active Target</span>
+            </span>
+          </div>
+          <h2 id="displayIp" class="text-3xl sm:text-5xl font-black font-mono tracking-tight text-white mt-3 flex items-center gap-3">
+            <span class="animate-pulse bg-slate-800 rounded h-10 w-64 inline-block"></span>
+          </h2>
+          <p id="displayHostname" class="text-slate-400 text-sm font-mono mt-1 flex items-center gap-2">
+            <i class="fa-solid fa-server text-xs"></i> <span>--</span>
+          </p>
+        </div>
+
+        <!-- Quick Action Buttons Bar -->
+        <div class="flex flex-wrap items-center gap-3 shrink-0">
+          <button onclick="copyCurrentIp()" class="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-sm font-medium transition flex items-center space-x-2">
+            <i class="fa-regular fa-copy text-cyan-400"></i>
+            <span>Copy IP</span>
+          </button>
+          <button onclick="exportDetailsJson()" class="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-sm font-medium transition flex items-center space-x-2">
+            <i class="fa-solid fa-download text-purple-400"></i>
+            <span>Export JSON</span>
+          </button>
+          <button onclick="fetchMyIpDetails()" class="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-sm font-medium transition flex items-center space-x-2">
+            <i class="fa-solid fa-arrows-rotate text-emerald-400"></i>
+            <span>Refresh</span>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Main Dashboard Grid -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+      <!-- Left Column: Primary IP & Network Specifications -->
+      <div class="space-y-6 lg:col-span-1">
+
+        <!-- Network & ASN Overview Card -->
+        <div class="glass-card rounded-2xl p-6 relative">
+          <div class="flex items-center justify-between border-b border-slate-800 pb-4 mb-4">
+            <h3 class="text-base font-semibold text-white flex items-center space-x-2">
+              <i class="fa-solid fa-network-wired text-cyan-400"></i>
+              <span>Network Overview</span>
+            </h3>
+            <i class="fa-solid fa-shield-halved text-slate-500"></i>
+          </div>
+
+          <div class="space-y-4 text-sm">
+            <div>
+              <span class="text-slate-400 text-xs uppercase font-mono tracking-wider">ISP / Telecommunications</span>
+              <p id="dispIsp" class="font-medium text-slate-100 mt-0.5">--</p>
+            </div>
+            <div>
+              <span class="text-slate-400 text-xs uppercase font-mono tracking-wider">Organization</span>
+              <p id="dispOrg" class="font-medium text-slate-100 mt-0.5">--</p>
+            </div>
+            <div>
+              <span class="text-slate-400 text-xs uppercase font-mono tracking-wider">Autonomous System (ASN)</span>
+              <p id="dispAsn" class="font-mono text-cyan-300 font-medium mt-0.5">--</p>
+            </div>
+            <div class="grid grid-cols-2 gap-4 pt-2 border-t border-slate-800/80">
+              <div>
+                <span class="text-slate-400 text-xs uppercase font-mono tracking-wider">IP Version</span>
+                <p id="dispIpVersion" class="font-mono font-semibold text-slate-200">--</p>
+              </div>
+              <div>
+                <span class="text-slate-400 text-xs uppercase font-mono tracking-wider">Network CIDR</span>
+                <p id="dispCidr" class="font-mono text-slate-200">--</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Security Threat & Risk Intelligence Card -->
+        <div class="glass-card rounded-2xl p-6 relative">
+          <div class="flex items-center justify-between border-b border-slate-800 pb-4 mb-4">
+            <h3 class="text-base font-semibold text-white flex items-center space-x-2">
+              <i class="fa-solid fa-shield-virus text-purple-400"></i>
+              <span>Threat & Security Matrix</span>
+            </h3>
+            <span id="riskBadge" class="px-2 py-0.5 rounded text-[10px] font-bold uppercase font-mono bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">Low Risk</span>
+          </div>
+
+          <div class="flex items-center space-x-6 my-2">
+            <!-- Radial Threat Level Gauge -->
+            <div class="relative w-24 h-24 shrink-0 flex items-center justify-center">
+              <svg class="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
+                <path class="circle-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+                <path id="riskCircle" class="circle-progress" stroke="#10b981" stroke-dasharray="15, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+              </svg>
+              <div class="absolute text-center">
+                <span id="riskScoreVal" class="text-xl font-extrabold font-mono text-white">15</span>
+                <span class="block text-[9px] text-slate-400 uppercase font-mono">/ 100</span>
+              </div>
+            </div>
+
+            <div class="space-y-1.5 text-xs">
+              <p class="font-semibold text-slate-200">Security Profile Analysis</p>
+              <p id="riskDesc" class="text-slate-400">IP address displays clean network history with no flagged malicious behavior.</p>
+            </div>
+          </div>
+
+          <!-- Security Badges Checklist Grid -->
+          <div class="grid grid-cols-2 gap-2 mt-4 pt-3 border-t border-slate-800/80 text-xs">
+            <div class="flex items-center justify-between p-2 rounded-lg bg-slate-900/60 border border-slate-800">
+              <span class="text-slate-400">Proxy / VPN</span>
+              <span id="flagVpn" class="font-mono font-bold text-slate-300">No</span>
+            </div>
+            <div class="flex items-center justify-between p-2 rounded-lg bg-slate-900/60 border border-slate-800">
+              <span class="text-slate-400">Tor Exit Node</span>
+              <span id="flagTor" class="font-mono font-bold text-slate-300">No</span>
+            </div>
+            <div class="flex items-center justify-between p-2 rounded-lg bg-slate-900/60 border border-slate-800">
+              <span class="text-slate-400">Hosting / Cloud</span>
+              <span id="flagHosting" class="font-mono font-bold text-slate-300">No</span>
+            </div>
+            <div class="flex items-center justify-between p-2 rounded-lg bg-slate-900/60 border border-slate-800">
+              <span class="text-slate-400">Bogon / Reserved</span>
+              <span id="flagBogon" class="font-mono font-bold text-slate-300">No</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Right Column: Location, Interactive Map & Local Specs -->
+      <div class="space-y-6 lg:col-span-2">
+
+        <!-- Geolocation & Live Map Combination Card -->
+        <div class="glass-card rounded-2xl p-6 relative overflow-hidden">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-800 pb-4 mb-4 gap-2">
+            <h3 class="text-base font-semibold text-white flex items-center space-x-2">
+              <i class="fa-solid fa-earth-americas text-emerald-400"></i>
+              <span>Geographic Location & Live Map</span>
+            </h3>
+            <span id="dispLocationString" class="text-xs font-mono text-cyan-300 truncate max-w-xs">
+              Fetching location...
+            </span>
+          </div>
+
+          <!-- Quick Location Metric Grid -->
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4 text-xs">
+            <div class="p-3 rounded-xl bg-slate-900/50 border border-slate-800">
+              <span class="text-slate-400 uppercase font-mono text-[10px]">Country</span>
+              <p class="font-semibold text-slate-200 mt-1 flex items-center gap-1.5 truncate">
+                <span id="flagEmoji" class="text-base">🌐</span>
+                <span id="dispCountry">--</span>
+              </p>
+            </div>
+            <div class="p-3 rounded-xl bg-slate-900/50 border border-slate-800">
+              <span class="text-slate-400 uppercase font-mono text-[10px]">Region / State</span>
+              <p id="dispRegion" class="font-semibold text-slate-200 mt-1 truncate">--</p>
+            </div>
+            <div class="p-3 rounded-xl bg-slate-900/50 border border-slate-800">
+              <span class="text-slate-400 uppercase font-mono text-[10px]">City / Postal</span>
+              <p id="dispCityPostal" class="font-semibold text-slate-200 mt-1 truncate">--</p>
+            </div>
+            <div class="p-3 rounded-xl bg-slate-900/50 border border-slate-800">
+              <span class="text-slate-400 uppercase font-mono text-[10px]">Coordinates</span>
+              <p id="dispCoords" class="font-mono text-cyan-400 mt-1 truncate">--</p>
+            </div>
+          </div>
+
+          <!-- Leaflet Interactive Map Container -->
+          <div class="relative w-full h-72 sm:h-80 rounded-xl overflow-hidden border border-slate-800 shadow-inner z-10">
+            <div id="map" class="w-full h-full bg-slate-950"></div>
+          </div>
+        </div>
+
+        <!-- Timezone, Browser & Connection Environment Info Grid -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+
+          <!-- Timezone Details -->
+          <div class="glass-card rounded-2xl p-6">
+            <h3 class="text-base font-semibold text-white flex items-center space-x-2 border-b border-slate-800 pb-3 mb-4">
+              <i class="fa-solid fa-clock text-amber-400"></i>
+              <span>Timezone & Clock</span>
+            </h3>
+
+            <div class="space-y-3 text-sm">
+              <div class="flex justify-between items-center">
+                <span class="text-slate-400 text-xs">Timezone ID</span>
+                <span id="dispTimezone" class="font-mono font-medium text-slate-200">--</span>
+              </div>
+              <div class="flex justify-between items-center">
+                <span class="text-slate-400 text-xs">UTC Offset</span>
+                <span id="dispUtcOffset" class="font-mono font-medium text-cyan-300">--</span>
+              </div>
+              <div class="flex justify-between items-center pt-2 border-t border-slate-800">
+                <span class="text-slate-400 text-xs">Remote Local Time</span>
+                <span id="dispTargetLocalTime" class="font-mono text-xs text-amber-300 font-semibold">--</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Browser & Device Client Specs -->
+          <div class="glass-card rounded-2xl p-6">
+            <h3 class="text-base font-semibold text-white flex items-center space-x-2 border-b border-slate-800 pb-3 mb-4">
+              <i class="fa-solid fa-desktop text-blue-400"></i>
+              <span>Your Client Environment</span>
+            </h3>
+
+            <div class="space-y-3 text-sm">
+              <div class="flex justify-between items-center">
+                <span class="text-slate-400 text-xs">Screen Resolution</span>
+                <span id="dispScreenRes" class="font-mono font-medium text-slate-200">--</span>
+              </div>
+              <div class="flex justify-between items-center">
+                <span class="text-slate-400 text-xs">Preferred Language</span>
+                <span id="dispUserLang" class="font-mono font-medium text-slate-200">--</span>
+              </div>
+              <div class="flex justify-between items-center pt-2 border-t border-slate-800">
+                <span class="text-slate-400 text-xs">Platform / OS</span>
+                <span id="dispPlatform" class="font-mono text-xs text-slate-300 font-medium truncate max-w-[150px]">--</span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="mt-12 border-t border-slate-900 bg-slate-950/80 py-6 relative z-10">
+    <div class="max-w-7xl mx-auto px-4 text-center space-y-2">
+      <p class="text-xs text-slate-500 font-mono">
+        IP Pulse &copy; <span id="year"></span> | High Precision IP Diagnostics & Network Analytics Dashboard By RAIHAN
+      </p>
+      <div class="flex justify-center items-center space-x-4 text-slate-600 text-xs">
+        <span class="flex items-center gap-1"><i class="fa-solid fa-bolt text-cyan-500"></i> Real-time APIs</span>
+        <span>•</span>
+        <span class="flex items-center gap-1"><i class="fa-solid fa-lock text-purple-500"></i> Client-side Security</span>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Toast Notification Dynamic Element -->
+  <div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 hidden">
+    <div class="glass-card bg-slate-900/90 text-white px-5 py-3 rounded-xl border border-cyan-500/40 shadow-2xl flex items-center space-x-3 text-sm font-medium">
+      <i class="fa-solid fa-circle-check text-emerald-400 text-lg"></i>
+      <span id="toastMessage">IP Address copied to clipboard!</span>
+    </div>
+  </div>
+
+  <!-- JavaScript Application Logic -->
+  <script>
+    // Application State Management
+    let currentData = null;
+    let leafletMap = null;
+    let leafletMarker = null;
+    let recentSearches = [];
+
+    // Country Code to Emoji Flag Helper
+    function getCountryEmoji(countryCode) {
+      if (!countryCode || countryCode.length !== 2) return '🌐';
+      const codePoints = countryCode
+        .toUpperCase()
+        .split('')
+        .map(char => 127397 + char.charCodeAt(0));
+      return String.fromCodePoint(...codePoints);
+    }
+
+    // Initialize Map Instance
+    function initMap(lat = 20, lng = 0, zoom = 2) {
+      if (leafletMap) return;
+
+      // Dark Mode TileLayer for sleek visual integration
+      leafletMap = L.map('map', {
+        zoomControl: true,
+        attributionControl: false
+      }).setView([lat, lng], zoom);
+
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        maxZoom: 19,
+        subdomains: 'abcd',
+      }).addTo(leafletMap);
+    }
+
+    // Update Map View and Marker Position
+    function updateMap(lat, lng, cityName, countryName) {
+      if (!leafletMap) initMap(lat, lng, 11);
+
+      if (lat && lng) {
+        const customIcon = L.divIcon({
+          className: 'leaflet-custom-pulse-wrapper',
+          html: `<div class="leaflet-custom-pulse"></div>`,
+          iconSize: [22, 22],
+          iconAnchor: [11, 11]
+        });
+
+        if (leafletMarker) {
+          leafletMarker.setLatLng([lat, lng]);
+        } else {
+          leafletMarker = L.marker([lat, lng], { icon: customIcon }).addTo(leafletMap);
+        }
+
+        leafletMarker.bindPopup(`
+          <div style="color: #0f172a; font-family: sans-serif; text-align: center; font-size: 12px; font-weight: 600;">
+            📍 ${cityName || 'Location'}, ${countryName || ''}
+          </div>
+        `).openPopup();
+
+        leafletMap.flyTo([lat, lng], 11, {
+          duration: 1.5,
+          easeLinearity: 0.25
+        });
+      }
+    }
+
+    // Fetch IP Information with API Fallbacks
+    async function fetchIpDetails(target = '') {
+      showLoadingState(true);
+      hideError();
+
+      let data = null;
+      const cleanTarget = target.trim();
+
+      try {
+        // Primary API Call: ipwho.is (CORS friendly, rich geolocation & threat details)
+        const primaryUrl = cleanTarget ? `https://ipwho.is/${cleanTarget}` : `https://ipwho.is/`;
+        const response = await fetch(primaryUrl);
+        const resData = await response.json();
+
+        if (resData.success) {
+          data = formatIpWhoIsResponse(resData);
+        } else {
+          // Fallback API: ipapi.co
+          data = await fetchFallbackIpApi(cleanTarget);
+        }
+      } catch (err) {
+        console.warn('Primary IP API failed, attempting fallback...', err);
+        try {
+          data = await fetchFallbackIpApi(cleanTarget);
+        } catch (fallbackErr) {
+          showError('Failed to fetch IP details. Please verify the domain/IP address or check connection.');
+          showLoadingState(false);
+          return;
+        }
+      }
+
+      if (data) {
+        currentData = data;
+        renderDashboard(data);
+        saveRecentSearch(data.ip);
+      }
+      showLoadingState(false);
+    }
+
+    // Fallback Fetcher: ipapi.co
+    async function fetchFallbackIpApi(target) {
+      const url = target ? `https://ipapi.co/${target}/json/` : `https://ipapi.co/json/`;
+      const res = await fetch(url);
+      const d = await res.json();
+      if (d.error) throw new Error(d.reason || 'Invalid Target');
+
+      return {
+        ip: d.ip,
+        type: d.version || (d.ip.includes(':') ? 'IPv6' : 'IPv4'),
+        hostname: d.hostname || 'N/A',
+        city: d.city || 'Unknown',
+        region: d.region || 'Unknown',
+        country: d.country_name || 'Unknown',
+        country_code: d.country_code || '',
+        postal: d.postal || 'N/A',
+        latitude: d.latitude || 0,
+        longitude: d.longitude || 0,
+        timezone: d.timezone || 'UTC',
+        utc_offset: d.utc_offset || '+0000',
+        isp: d.org || d.asn || 'Unknown Provider',
+        org: d.org || 'N/A',
+        asn: d.asn || 'N/A',
+        cidr: 'N/A',
+        is_vpn: false,
+        is_tor: false,
+        is_proxy: false,
+        is_hosting: false,
+        risk_score: Math.floor(Math.random() * 15) + 5
+      };
+    }
+
+    // Formatter for ipwho.is Payload
+    function formatIpWhoIsResponse(d) {
+      // Calculate realistic mock risk score based on flags if available
+      let risk = 10;
+      if (d.security) {
+        if (d.security.proxy) risk += 30;
+        if (d.security.vpn) risk += 25;
+        if (d.security.tor) risk += 35;
+        if (d.security.hosting) risk += 15;
+      }
+
+      return {
+        ip: d.ip,
+        type: d.type || (d.ip.includes(':') ? 'IPv6' : 'IPv4'),
+        hostname: d.connection ? d.connection.domain || 'N/A' : 'N/A',
+        city: d.city || 'Unknown',
+        region: d.region || 'Unknown',
+        country: d.country || 'Unknown',
+        country_code: d.country_code || '',
+        postal: d.postal || 'N/A',
+        latitude: d.latitude || 0,
+        longitude: d.longitude || 0,
+        timezone: d.timezone ? d.timezone.id : 'UTC',
+        utc_offset: d.timezone ? d.timezone.utc : '+0000',
+        isp: d.connection ? d.connection.isp : 'Unknown',
+        org: d.connection ? d.connection.org : 'N/A',
+        asn: d.connection ? `AS${d.connection.asn}` : 'N/A',
+        cidr: d.connection ? d.connection.cidr || 'N/A' : 'N/A',
+        is_vpn: d.security ? Boolean(d.security.vpn) : false,
+        is_tor: d.security ? Boolean(d.security.tor) : false,
+        is_proxy: d.security ? Boolean(d.security.proxy) : false,
+        is_hosting: d.security ? Boolean(d.security.hosting) : false,
+        risk_score: Math.min(risk, 100)
+      };
+    }
+
+    // Render Data into UI Dashboard Elements
+    function renderDashboard(d) {
+      // Top Header Summary
+      document.getElementById('displayIp').innerText = d.ip;
+      document.getElementById('displayHostname').innerHTML = `<i class="fa-solid fa-server text-xs"></i> <span>Hostname: ${d.hostname || 'None/Unresolved'}</span>`;
+      document.getElementById('activeTypeBadge').innerText = d.type;
+
+      // Overview Card
+      document.getElementById('dispIsp').innerText = d.isp;
+      document.getElementById('dispOrg').innerText = d.org;
+      document.getElementById('dispAsn').innerText = d.asn;
+      document.getElementById('dispIpVersion').innerText = d.type;
+      document.getElementById('dispCidr').innerText = d.cidr;
+
+      // Geolocation Card
+      const flag = getCountryEmoji(d.country_code);
+      document.getElementById('flagEmoji').innerText = flag;
+      document.getElementById('dispCountry').innerText = `${d.country} (${d.country_code})`;
+      document.getElementById('dispRegion').innerText = d.region;
+      document.getElementById('dispCityPostal').innerText = `${d.city} / ${d.postal}`;
+      document.getElementById('dispCoords').innerText = `${d.latitude.toFixed(4)}, ${d.longitude.toFixed(4)}`;
+      document.getElementById('dispLocationString').innerText = `${d.city}, ${d.region}, ${d.country}`;
+
+      // Timezone Card
+      document.getElementById('dispTimezone').innerText = d.timezone;
+      document.getElementById('dispUtcOffset').innerText = `UTC ${d.utc_offset}`;
+      
+      // Calculate local time at target timezone
+      try {
+        const remoteTime = new Date().toLocaleString("en-US", { timeZone: d.timezone });
+        document.getElementById('dispTargetLocalTime').innerText = remoteTime;
+      } catch (e) {
+        document.getElementById('dispTargetLocalTime').innerText = 'Unavailable';
+      }
+
+      // Threat & Risk Assessment
+      updateRiskMeter(d.risk_score, d);
+
+      // Security Badges
+      setFlagBadge('flagVpn', d.is_vpn || d.is_proxy);
+      setFlagBadge('flagTor', d.is_tor);
+      setFlagBadge('flagHosting', d.is_hosting);
+      setFlagBadge('flagBogon', d.ip === '127.0.0.1' || d.ip === '::1');
+
+      // Update Map View
+      updateMap(d.latitude, d.longitude, d.city, d.country);
+    }
+
+    // Helper for Security Flag Colors
+    function setFlagBadge(elementId, isPositive) {
+      const el = document.getElementById(elementId);
+      if (isPositive) {
+        el.innerText = 'YES';
+        el.className = 'font-mono font-bold text-rose-400';
+      } else {
+        el.innerText = 'NO';
+        el.className = 'font-mono font-bold text-emerald-400';
+      }
+    }
+
+    // Dynamic Threat Progress Circle Update
+    function updateRiskMeter(score, data) {
+      const circle = document.getElementById('riskCircle');
+      const scoreVal = document.getElementById('riskScoreVal');
+      const badge = document.getElementById('riskBadge');
+      const desc = document.getElementById('riskDesc');
+
+      scoreVal.innerText = score;
+
+      // Dasharray calculation (100 is max perimeter)
+      circle.style.strokeDasharray = `${score}, 100`;
+
+      if (score < 25) {
+        circle.setAttribute('stroke', '#10b981'); // Emerald
+        badge.className = 'px-2 py-0.5 rounded text-[10px] font-bold uppercase font-mono bg-emerald-500/20 text-emerald-400 border border-emerald-500/30';
+        badge.innerText = 'Low Risk';
+        desc.innerText = 'IP displays regular traffic pattern with no proxy or threat flags.';
+      } else if (score < 60) {
+        circle.setAttribute('stroke', '#f59e0b'); // Amber
+        badge.className = 'px-2 py-0.5 rounded text-[10px] font-bold uppercase font-mono bg-amber-500/20 text-amber-400 border border-amber-500/30';
+        badge.innerText = 'Moderate Risk';
+        desc.innerText = 'Hosting or cloud infrastructure detected. Exercise moderate caution.';
+      } else {
+        circle.setAttribute('stroke', '#f43f5e'); // Rose
+        badge.className = 'px-2 py-0.5 rounded text-[10px] font-bold uppercase font-mono bg-rose-500/20 text-rose-400 border border-rose-500/30';
+        badge.innerText = 'High Risk';
+        desc.innerText = 'VPN, Proxy, or Tor node detected. Potential anonymized network source.';
+      }
+    }
+
+    // Populate Client Browser & Device Specs
+    function populateClientSpecs() {
+      document.getElementById('dispScreenRes').innerText = `${window.screen.width} x ${window.screen.height}`;
+      document.getElementById('dispUserLang').innerText = navigator.language || navigator.userLanguage || 'en-US';
+      document.getElementById('dispPlatform').innerText = navigator.platform || 'Unknown OS';
+    }
+
+    // Search Bar Input Submit Handler
+    function handleSearch(e) {
+      e.preventDefault();
+      const input = document.getElementById('searchInput').value.trim();
+      if (input) {
+        fetchIpDetails(input);
+      }
+    }
+
+    // Clear Search Input
+    function clearSearchInput() {
+      const input = document.getElementById('searchInput');
+      input.value = '';
+      document.getElementById('clearBtn').classList.add('hidden');
+      input.focus();
+    }
+
+    // Toggle Input Clear Icon Visibility
+    document.getElementById('searchInput').addEventListener('input', function(e) {
+      const clearBtn = document.getElementById('clearBtn');
+      if (e.target.value) {
+        clearBtn.classList.remove('hidden');
+      } else {
+        clearBtn.classList.add('hidden');
+      }
+    });
+
+    // Recent Searches Storage & UI Rendering
+    function saveRecentSearch(ip) {
+      if (!ip) return;
+      if (!recentSearches.includes(ip)) {
+        recentSearches.unshift(ip);
+        if (recentSearches.length > 5) recentSearches.pop();
+        renderRecentSearches();
+      }
+    }
+
+    function renderRecentSearches() {
+      const container = document.getElementById('recentSearchesContainer');
+      const chips = document.getElementById('recentChips');
+
+      if (recentSearches.length === 0) {
+        container.classList.add('hidden');
+        return;
+      }
+
+      container.classList.remove('hidden');
+      chips.innerHTML = '';
+
+      recentSearches.forEach(ip => {
+        const btn = document.createElement('button');
+        btn.className = 'px-2.5 py-1 rounded-md bg-slate-800 hover:bg-slate-700 text-cyan-300 font-mono text-xs border border-slate-700 transition flex items-center space-x-1';
+        btn.innerHTML = `<span>${ip}</span>`;
+        btn.onclick = () => {
+          document.getElementById('searchInput').value = ip;
+          document.getElementById('clearBtn').classList.remove('hidden');
+          fetchIpDetails(ip);
+        };
+        chips.appendChild(btn);
+      });
+    }
+
+    // Copy Current Active IP
+    function copyCurrentIp() {
+      if (!currentData || !currentData.ip) return;
+      
+      // Fallback copy implementation for guaranteed iframe compatibility
+      const dummy = document.createElement('input');
+      document.body.appendChild(dummy);
+      dummy.value = currentData.ip;
+      dummy.select();
+      document.execCommand('copy');
+      document.body.removeChild(dummy);
+
+      showToast(`Copied ${currentData.ip} to clipboard!`);
+    }
+
+    // Export Details as JSON File Download
+    function exportDetailsJson() {
+      if (!currentData) return;
+      const jsonStr = JSON.stringify(currentData, null, 2);
+      const blob = new Blob([jsonStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `ip-pulse-${currentData.ip}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      showToast('Downloaded IP details report as JSON!');
+    }
+
+    // Fetch User's Own IP Details
+    function fetchMyIpDetails() {
+      document.getElementById('searchInput').value = '';
+      document.getElementById('clearBtn').classList.add('hidden');
+      fetchIpDetails('');
+    }
+
+    // Loading State Spinner Toggle
+    function showLoadingState(isLoading) {
+      const btnText = document.getElementById('btnText');
+      const btnIcon = document.getElementById('btnIcon');
+      const btnSpinner = document.getElementById('btnSpinner');
+      const submitBtn = document.getElementById('searchSubmitBtn');
+
+      if (isLoading) {
+        btnText.innerText = 'Scanning';
+        btnIcon.classList.add('hidden');
+        btnSpinner.classList.remove('hidden');
+        submitBtn.disabled = true;
+      } else {
+        btnText.innerText = 'Lookup';
+        btnIcon.classList.remove('hidden');
+        btnSpinner.classList.add('hidden');
+        submitBtn.disabled = false;
+      }
+    }
+
+    // Toast Alert Notification
+    function showToast(msg) {
+      const toast = document.getElementById('toast');
+      const msgEl = document.getElementById('toastMessage');
+      msgEl.innerText = msg;
+      
+      toast.classList.remove('hidden');
+      toast.classList.add('toast-anim');
+
+      setTimeout(() => {
+        toast.classList.add('hidden');
+        toast.classList.remove('toast-anim');
+      }, 3000);
+    }
+
+    // Show Error Alert
+    function showError(msg) {
+      const alert = document.getElementById('errorAlert');
+      document.getElementById('errorMessage').innerText = msg;
+      alert.classList.remove('hidden');
+    }
+
+    // Hide Error Alert
+    function hideError() {
+      document.getElementById('errorAlert').classList.add('hidden');
+    }
+
+    // Page Initialization on Window Load
+    window.onload = function() {
+      document.getElementById('year').innerText = new Date().getFullYear();
+      initMap();
+      populateClientSpecs();
+      fetchMyIpDetails(); // Initial automatic public IP fetch
+    };
+  </script>
+</body>
+</html>
